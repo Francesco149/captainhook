@@ -11,7 +11,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <link.h>
-#include <pthread.h>
 #include <unistd.h>
 
 #define LOG_MAX 2048
@@ -29,31 +28,6 @@ void log_n(char* s, int n) {
 }
 
 void log_s(char* s) { log_n(s, strlen(s)); }
-
-#define exports(macro) \
-
-/*
-  I decided to go with absolute jmp's. since arm doesn't allow 32-bit
-  immediate jumps I have to place the address right after the jmp and
-  reference it using [pc,#-4]. pc is 8 bytes after the current instruction,
-  so #-4 reads 4 bytes after the current instruction.
-  0xBAADF00D is then replaced by the correct address at runtime
-*/
-
-#define define_trampoline(name) \
-void __attribute__((naked)) name() { \
-    asm("ldr pc,[pc,#-4]"); \
-    asm(".word 0xBAADF00D"); \
-}
-
-/* runs define_trampoline on all functions listed in exports */
-exports(define_trampoline)
-
-#define stringify_(x) #x
-#define stringify(x) stringify_(x)
-#define to_string_array(x) stringify(x),
-static char* export_names[] = { exports(to_string_array) 0 };
-
 void (*_JNI_OnLoad)(void* env);
 
 /*
@@ -392,7 +366,7 @@ int phdr_callback(struct dl_phdr_info* info, size_t size, void* data) {
 }
 
 static
-void* hook_from_metadata(void* param) {
+void hook_from_metadata() {
   char buf[512], buf2[512];
   char const* p;
   char* dst;
@@ -423,7 +397,7 @@ void* hook_from_metadata(void* param) {
   f = fopen(buf2, "rb");
   if (!f) {
     log_s("failed to open metadata file");
-    return 0;
+    return;
   }
   if (fread(&hdr, sizeof(hdr), 1, f) != 1) {
     log_s("failed to read metadata header");
@@ -503,26 +477,17 @@ cleanup:
   free(metadata_strings);
   free(methods);
   fclose(f);
-  return 0;
 }
 
 static
 void init() {
-  char** s;
   void *original, *stub;
   log_s("hello from the stub library!");
   dlopen("libil2cpp.so", RTLD_LAZY);
   original = dlopen("libmain.so.bak", RTLD_LAZY);
   stub = dlopen("libmain.so", RTLD_LAZY);
-  for (s = export_names; *s; ++s) {
-    void** stub_func = dlsym(stub, *s);
-    log_s(*s);
-    munprotect(&stub_func[1], sizeof(void*));
-    stub_func[1] = dlsym(original, *s);
-  }
   *(void**)&_JNI_OnLoad = dlsym(original, "JNI_OnLoad");
-  pthread_t thread;
-  pthread_create(&thread, 0, hook_from_metadata, 0);
+  hook_from_metadata();
 }
 
 void JNI_OnLoad(void* env) {
