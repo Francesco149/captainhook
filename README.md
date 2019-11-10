@@ -51,6 +51,10 @@ a file, like
 `adb shell logcat -d | grep --line-buffered captainhook > log.txt`
 so you can read it in your favorite editor
 
+if it fails to open global-metadata.dat, you might need to change
+permissions on the directory it's located at. for example to make it work
+on bluestacks I had to do `chmod -R 777 /data/media` as root.
+
 my personal setup is a bit different, I host the binary on a local http
 server and then adb shell over lan into my android machine, and wget it
 as root:

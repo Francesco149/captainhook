@@ -11,7 +11,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <link.h>
-#include <unistd.h>
+#include <errno.h>
 
 #define LOG_MAX 2048
 
@@ -379,23 +379,32 @@ void hook_from_metadata() {
   unsigned* method_pointers;
   unsigned last_get_Text;
   char* metadata_strings = 0;
-  usleep(1000000);
   if (!dladdr(hook_from_metadata, &dli)) {
     log_s("failed to get own path");
   }
-  // /data/app/com.klab.lovelive.allstars-mi_*/lib/arm/*.so
+  /* android x86 path */
+  /* /data/app/com.klab.lovelive.allstars-mi_.../lib/arm/....so */
   sprintf(buf, "running as %s\n", dli.dli_fname);
   log_s(buf);
   for (p = dli.dli_fname; *p && strstr(p, "com.") != p; ++p);
-  // com.klab.lovelive.allstars-mi_*/lib/arm/*.so
+  /* com.klab.lovelive.allstars-mi_.../lib/arm/....so */
   for (dst = buf; *p && *p != '-'; *dst++ = *p++);
   *dst = 0;
-  // com.klab.lovelive.allstars
+  /* com.klab.lovelive.allstars */
   sprintf(buf2,
     "/data/data/%s/files/il2cpp/Metadata/global-metadata.dat", buf);
   log_s(buf2);
   f = fopen(buf2, "rb");
   if (!f) {
+    /* on bluestacks it seems to have this different path. maybe on
+     * real device as well */
+    sprintf(buf2, "/data/media/0/Android/data/%s/files"
+      "/il2cpp/Metadata/global-metadata.dat", buf);
+    log_s(buf2);
+    f = fopen(buf2, "rb");
+  }
+  if (!f) {
+    log_s(strerror(errno));
     log_s("failed to open metadata file");
     return;
   }
